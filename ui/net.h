@@ -90,9 +90,13 @@ extern ip_t *net_addrs(
     int i);
 extern char *net_localaddr(
     void);
-
 extern int net_send_batch(
     struct mtr_ctl *ctl);
+
+int reach_target(struct mtr_ctl *ctl, int ttl);
+int net_send_batch_given_ttl(
+    struct mtr_ctl *ctl,int ttl);
+
 extern void net_end_transit(
     void);
 

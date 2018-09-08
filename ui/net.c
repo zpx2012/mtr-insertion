@@ -606,6 +606,60 @@ int net_send_batch(
     return 0;
 }
 
+int reach_target(struct mtr_ctl *ctl, int ttl){
+	return (addrcmp((void *) &(host[ttl].addr), (void *) remoteaddress, ctl->af) == 0);
+}
+
+int net_send_batch_given_ttl(
+    struct mtr_ctl *ctl,int ttl)
+{
+    int n_unknown = 0, i;
+
+    /* randomized packet size and/or bit pattern if packetsize<0 and/or 
+       bitpattern<0.  abs(packetsize) and/or abs(bitpattern) will be used 
+     */
+    if (ttl < ctl->fstTTL) {
+        if (ctl->cpacketsize < 0) {
+            /* Someone used a formula here that tried to correct for the 
+               "end-error" in "rand()". By "end-error" I mean that if you 
+               have a range for "rand()" that runs to 32768, and the 
+               destination range is 10000, you end up with 4 out of 32768 
+               0-2768's and only 3 out of 32768 for results 2769 .. 9999. 
+               As our detination range (in the example 10000) is much 
+               smaller (reasonable packet sizes), and our rand() range much 
+               larger, this effect is insignificant. Oh! That other formula
+               didn't work. */
+            packetsize =
+                MINPACKET + rand() % (-ctl->cpacketsize - MINPACKET);
+        } else {
+            packetsize = ctl->cpacketsize;
+        }
+        if (ctl->bitpattern < 0) {
+            ctl->bitpattern =
+                -(int) (256 + 255 * (rand() / (RAND_MAX + 0.1)));
+        }
+    }
+
+    net_send_query(ctl, ttl, abs(packetsize));
+
+    for (i = ctl->fstTTL - 1; i < ttl; i++) {
+        if (addrcmp
+            ((void *) &(host[i].addr), (void *) &ctl->unspec_addr,
+             ctl->af) == 0)
+            n_unknown++;
+
+        /* The second condition in the next "if" statement was added in mtr-0.56, 
+           but I don't remember why. It makes mtr stop skipping sections of unknown
+           hosts. Removed in 0.65. 
+           If the line proves necessary, it should at least NOT trigger that line
+           when host[i].addr == 0 */
+        if ((addrcmp((void *) &(host[i].addr),
+                     (void *) remoteaddress, ctl->af) == 0))
+            n_unknown = MaxHost;        /* Make sure we drop into "we should restart" */
+    }
+
+	return n_unknown;
+}
 
 /*  Ensure the interface address a valid address for our use  */
 static void net_validate_interface_address(

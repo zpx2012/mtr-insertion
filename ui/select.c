@@ -61,6 +61,10 @@ void select_loop(
     int graceperiod = 0;
     struct timeval intervaltime;
     static double dnsinterval = 0;
+	
+	int n_unknown = 0;
+	int ttl_cur = ctl->fstTTL-1;
+	//	int numhosts = 10;???
 
     memset(&startgrace, 0, sizeof(startgrace));
 
@@ -133,16 +137,25 @@ void select_loop(
                     lasttime = thistime;
 
                     if (!graceperiod) {
-                        if (NumPing >= ctl->MaxPing
+                        if (
+							((NumPing == 0 && reach_target(ctl,ttl_cur)) || (n_unknown > ctl->maxUnknown) || (ttl_cur >= ctl->maxTTL - 1))
                             && (!ctl->Interactive || ctl->ForceMaxPing)) {
                             graceperiod = 1;
                             startgrace = thistime;
                         }
 
+
                         /* do not send out batch when we've already initiated grace period */
-                        if (!graceperiod && net_send_batch(ctl))
-                            NumPing++;
+                        if (!graceperiod && NumPing < ctl->MaxPing){
+							n_unknown = net_send_batch_given_ttl(ctl,ttl_cur);
+							NumPing++;
+							if(NumPing == ctl->MaxPing){
+								NumPing = 0;
+								ttl_cur++;
+							}
+                        }
                     }
+
                 }
 
                 if (graceperiod) {
