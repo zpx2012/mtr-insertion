@@ -1,7 +1,8 @@
 //
 // Created by root on 18-8-26.
 //
-
+#ifndef MTR_TCP_C
+#define MTR_TCP_C
 
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -15,10 +16,15 @@
 #include <stdio.h>
 #include <stdint.h>
 
-uint32_t seq_1 = 0;
-uint32_t ack_seq_1 = 0;
+uint32_t seq_1 = 0;//network order
+uint32_t ack_seq_1 = 0;//network order
+uint16_t sport = 0;// network order
 int raw_sock_tx = 0;
 int raw_sock_rx = 0;
+FILE* log_file = NULL;
+
+uint8_t payload[1024] = {0};
+int payload_len = 0;	
 
 //Calculate the TCP header checksum of a string (as specified in rfc793)
 //Function from http://www.binarytides.com/raw-sockets-c-code-on-linux/
@@ -77,13 +83,16 @@ int initRawSocket(int protocol) {
     return sock;
 }
 
-void sendIpPacket(int sock, uint32_t srcIP, char *dstIP, uint16_t dstPort,
-                  uint16_t srcPort, uint8_t ttl, uint32_t seq, uint32_t ack_seq,
-                  uint8_t* payload, int payload_len, uint16_t ip_id) {
+int send_tcp_packet(int sock, uint32_t srcIP, uint16_t srcPort, 
+						 const struct sockaddr_storage *destaddr,
+						 uint8_t ttl, 
+						 uint32_t seq, 
+						 uint32_t ack_seq,
+                  		 uint16_t ip_id) {
     int bytes  = 1;
     struct iphdr *ipHdr;
     struct tcphdr *tcpHdr;
-
+    struct sockaddr_in* destaddr4 = (struct sockaddr_in*) destaddr;
     //Initial guess for the SEQ field of the TCP header
 //    uint32_t initSeqGuess = rand() * UINT32_MAX;
 
@@ -93,19 +102,11 @@ void sendIpPacket(int sock, uint32_t srcIP, char *dstIP, uint16_t dstPort,
     //Ethernet header + IP header + TCP header + data
     char packet[1514];
 
-    //Address struct to sendto()
-    struct sockaddr_in addr_in;
-
     //Pseudo TCP header to calculate the TCP header's checksum
     struct pseudoTCPPacket pTCPPacket;
 
     //Pseudo TCP Header + TCP Header + data
     char *pseudo_packet;
-
-    //Populate address struct
-    addr_in.sin_family = AF_INET;
-    addr_in.sin_port = htons(dstPort);
-    addr_in.sin_addr.s_addr = inet_addr(dstIP);
 
     //Allocate mem for ip and tcp headers and zero the allocation
     memset(packet, 0, sizeof(packet));
@@ -125,15 +126,17 @@ void sendIpPacket(int sock, uint32_t srcIP, char *dstIP, uint16_t dstPort,
     ipHdr->protocol = IPPROTO_TCP; //TCP protocol
     ipHdr->check = 0; //16 bit checksum of IP header. Can't calculate at this point
     ipHdr->saddr = srcIP; //32 bit format of source address
-    ipHdr->daddr = inet_addr(dstIP); //32 bit format of source address
+    ipHdr->daddr = destaddr4->sin_addr.s_addr; //32 bit format of source address
+//    memcpy(&ip->saddr, &srcaddr4->sin_addr, sizeof(uint32_t));
+//    memcpy(&ip->daddr, &destaddr4->sin_addr, sizeof(uint32_t));
 
     //Now we can calculate the check sum for the IP header check field
     ipHdr->check = csum((unsigned short *) packet, ipHdr->tot_len);
 //    printf("IP header checksum: %d\n\n\n", ipHdr->check);
 
     //Populate tcpHdr
-    tcpHdr->source = htons(srcPort); //16 bit in nbp format of source port
-    tcpHdr->dest = htons(dstPort); //16 bit in nbp format of destination port
+    tcpHdr->source = srcPort; //16 bit in nbp format of source port
+    tcpHdr->dest = destaddr4->sin_port; //16 bit in nbp format of destination port
     tcpHdr->seq = seq;
     tcpHdr->ack_seq = ack_seq;
 //    tcpHdr->seq = init_seq + 1; //32 bit sequence number, initially set to zero
@@ -154,7 +157,7 @@ void sendIpPacket(int sock, uint32_t srcIP, char *dstIP, uint16_t dstPort,
 
     //Now we can calculate the checksum for the TCP header
     pTCPPacket.srcAddr = srcIP; //32 bit format of source address
-    pTCPPacket.dstAddr = inet_addr(dstIP); //32 bit format of source address
+    pTCPPacket.dstAddr = destaddr4->sin_addr.s_addr; //32 bit format of source address
     pTCPPacket.zero = 0; //8 bit always zero
     pTCPPacket.protocol = IPPROTO_TCP; //8 bit TCP protocol
     pTCPPacket.TCP_len = htons(sizeof(struct tcphdr) + strlen(data)); // 16 bit length of TCP header
@@ -184,13 +187,14 @@ void sendIpPacket(int sock, uint32_t srcIP, char *dstIP, uint16_t dstPort,
 //        printf("TCP Checksum: %d\n", (int) tcpHdr->check);
 
         //Finally, send packet
-        if((bytes = sendto(sock, packet, ipHdr->tot_len, 0, (struct sockaddr *) &addr_in, sizeof(addr_in))) < 0) {
+        if((bytes = sendto(sock, packet, ipHdr->tot_len, 0, (struct sockaddr *)destaddr4, sizeof(struct sockaddr))) < 0) {
             perror("Error on sendto()");
+            return -1;
         }
         else {
 //            printf("Success! Sent %d bytes.\n", bytes);
         }
-
+        return 0;
 //        printf("SEQ guess: %u\n\n", initSeqGuess);
 
         //I'll sleep when I'm dead
@@ -205,50 +209,73 @@ void * interceptACK(void *pVoid) {
     uint8_t recvbuf[3000];
     struct sockaddr recvaddr;
     socklen_t len0 = sizeof(struct sockaddr);
+    struct sockaddr_in* destaddr4 = (struct sockaddr_in*) pVoid;
     while (1) {
         recvfrom(raw_sock_rx, recvbuf, 3000, 0, &recvaddr, &len0);
-        if (((struct iphdr*)recvbuf)->saddr == inet_addr((char*)pVoid)) {
-            struct tcphdr* tcpHeader = ((struct iphdr*)recvbuf) + 1;
-            if (tcpHeader->syn == 1) {
-                struct tcphdr *ptr = (struct tcphdr *) (recvbuf + sizeof(struct iphdr));
-                seq_1 = ptr->ack_seq;
-                ack_seq_1 = htonl((ntohl(ptr->seq) + 1));
-                break;
+		struct tcphdr* tcpHeader = (struct tcphdr *) (recvbuf + sizeof(struct iphdr));
+		if (((struct iphdr*)recvbuf)->daddr == destaddr4->sin_addr.s_addr && 
+			(tcpHeader->dest == destaddr4->sin_port)
+			) {
+       		if (tcpHeader->ack == 1) {
+                ack_seq_1 = tcpHeader->ack_seq;
+                seq_1 = htonl((ntohl(tcpHeader->seq) + 1));
+				sport = tcpHeader->source;
             }
-        }
+        }	
     }
 }
 
-extern int initTCP(const char* ipaddr, uint16_t port) {
+extern int init_two_raw_sock() {//need to extract raw socket creation
     srand(time(0));
     raw_sock_tx = initRawSocket(IPPROTO_RAW);
     raw_sock_rx = initRawSocket(IPPROTO_TCP);
-    int stream_socket = socket(AF_INET, SOCK_STREAM, 0);
-    struct sockaddr_in dest_port_addr;
-    dest_port_addr.sin_addr.s_addr = htonl(inet_network(ipaddr));
-    dest_port_addr.sin_family = AF_INET;
-    dest_port_addr.sin_port = htons(port);
+	return 0;
+}
+
+extern int create_rcv_thread(const struct sockaddr_storage *destaddr){
 
     pthread_t t1;
     pthread_attr_t t2;
-    pthread_create(&t1,0,interceptACK,ipaddr);
+    pthread_create(&t1,0,interceptACK,&destaddr);
 
-    if (connect (stream_socket, (struct sockaddr *) &dest_port_addr, sizeof(struct sockaddr_in)))
-        exit(-1);
+	int i = 0;
+	for (i = 0; i < 1024; i++) {
+		payload[i] = rand() % 255;
+	}
+	payload_len = rand() % 1024;
 
-    return stream_socket;
+	return 0;
 }
 
-extern int sendData(int stream_socket, const char* ipaddr, uint16_t port,
-                    uint8_t ttl, uint8_t* payload, int payload_len, uint16_t ip_id) {
 
-    struct sockaddr_in src_port_addr;
-    socklen_t len = sizeof(src_port_addr);
-    getsockname(stream_socket, (struct sockaddr *)&src_port_addr, &len);
-//    while(seq_1 == 0);
+extern int send_inserted_tcp_packet(    
+	int sequence,
+    const struct sockaddr_storage *srcaddr,
+    const struct sockaddr_storage *destaddr,
+    const struct probe_param_t *param){
 
-    sendIpPacket(raw_sock_tx, src_port_addr.sin_addr.s_addr, ipaddr, port, htons(src_port_addr.sin_port), ttl, seq_1, ack_seq_1, payload, payload_len, ip_id);
+	if (!seq_1 || !ack_seq_1 || !sport){
+		return -1;	
+	}
+	return send_tcp_packet(raw_sock_tx, ((struct sockaddr_in*)srcaddr)->sin_addr.s_addr, sport, destaddr, param->ttl, seq_1, ack_seq_1, sequence);
+}
 
+// extern int sendData(int stream_socket, const char* ipaddr, uint16_t port,
+//                     uint8_t ttl, uint8_t* payload, int payload_len, uint16_t ip_id) {
+
+//     struct sockaddr_in src_port_addr;
+//     socklen_t len = sizeof(src_port_addr);
+//     getsockname(stream_socket, (struct sockaddr *)&src_port_addr, &len);
+// 	log_file = fopen("tcp_log.txt","a");
+// 	fprintf(log_file,"%d:%s ",ttl, iso_time(time(NULL)));
+//     if(seq_1 == 0 || ack_seq_1 == 0){
+//         fprintf(log_file,'seq_1 == 0 or ack_seq_1 == 0\n');
+// 		fclose(log_file);
+//         return -1;
+//     }
+//     sendIpPacket(raw_sock_tx, src_port_addr.sin_addr.s_addr, ipaddr, port, htons(src_port_addr.sin_port), ttl, seq_1, ack_seq_1, payload, payload_len, ip_id);
+// 	fprintf(log_file,"sent successful\n");
+// 	fclose(log_file);
 
 
 
@@ -269,5 +296,6 @@ extern int sendData(int stream_socket, const char* ipaddr, uint16_t port,
 //        }
 //    }
 
-    return 0;
-}
+//     return 0;
+// }
+#endif //MTR_TCP_H

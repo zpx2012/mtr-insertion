@@ -40,6 +40,7 @@
 #include "asn.h"
 #include "display.h"
 #include "select.h"
+#include "utils.h"
 
 void select_loop(
     struct mtr_ctl *ctl)
@@ -64,6 +65,7 @@ void select_loop(
 	
 	int n_unknown = 0;
 	int ttl_cur = ctl->fstTTL-1;
+	FILE* sl_log_file = fopen("sl_log_file.log","w");
 	//	int numhosts = 10;???
 
     memset(&startgrace, 0, sizeof(startgrace));
@@ -149,6 +151,7 @@ void select_loop(
                         if (!graceperiod && NumPing < ctl->MaxPing){
 							n_unknown = net_send_batch_given_ttl(ctl,ttl_cur);
 							NumPing++;
+							fprintf(sl_log_file,"%d:%s %d\n",ttl_cur, iso_time(time(NULL)),NumPing);
 							if(NumPing == ctl->MaxPing){
 								NumPing = 0;
 								ttl_cur++;
@@ -280,5 +283,6 @@ void select_loop(
             anyset = 1;
         }
     }
+	fclose(sl_log_file);
     return;
 }
