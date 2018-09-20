@@ -170,6 +170,7 @@ void respond_to_probe(
 int decode_address_string(
     int ip_version,
     const char *address_string,
+    const int port,
     struct sockaddr_storage *address);
 
 int resolve_probe_addresses(

@@ -24,6 +24,10 @@
 #include <sys/socket.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <linux/tcp.h>
+#include <linux/ip.h>
+#include <time.h>
+#include <pthread.h>
 
 #include "protocols.h"
 
@@ -34,9 +38,6 @@
 #endif
 
 //////////////////////////////////
-uint32_t seq_1 = 0;//network order
-uint32_t ack_seq_1 = 0;//network order
-uint16_t sport = 0;// network order
 int raw_sock_tx = 0;
 int raw_sock_rx = 0;
 FILE* log_file = NULL;
@@ -210,7 +211,7 @@ int send_tcp_packet(int sock, uint32_t srcIP, uint16_t srcPort,
             return -1;
         }
         else {
-//            printf("Success! Sent %d bytes.\n", bytes);
+            //fprintf(stderr,"Success! Sent %d bytes.\n", bytes);
         }
         return 0;
 //        printf("SEQ guess: %u\n\n", initSeqGuess);
@@ -223,38 +224,32 @@ int send_tcp_packet(int sock, uint32_t srcIP, uint16_t srcPort,
 //    }
 }
 
-void * intercept_existing_conn(void *pVoid) {
-    uint8_t recvbuf[3000];
-    struct sockaddr recvaddr;
-    socklen_t len0 = sizeof(struct sockaddr);
-    struct sockaddr_in* destaddr4 = (struct sockaddr_in*) pVoid;
-    while (1) {
-        recvfrom(raw_sock_rx, recvbuf, 3000, 0, &recvaddr, &len0);
-		struct tcphdr* tcpHeader = (struct tcphdr *) (recvbuf + sizeof(struct iphdr));
-		if (((struct iphdr*)recvbuf)->daddr == destaddr4->sin_addr.s_addr && 
-			(tcpHeader->dest == destaddr4->sin_port)
-			) {
-       		if (tcpHeader->ack == 1) {
-                ack_seq_1 = tcpHeader->ack_seq;
-                seq_1 = htonl((ntohl(tcpHeader->seq) + 1));
-				sport = tcpHeader->source;
-            }
-        }	
-    }
-}
+// void * intercept_existing_conn(void *pVoid) {
+//     uint8_t recvbuf[3000];
+//     struct sockaddr recvaddr;
+//     socklen_t len0 = sizeof(struct sockaddr);
+//     struct sockaddr_in* destaddr4 = (struct sockaddr_in*) pVoid;
+//     while (1) {
+//         recvfrom(raw_sock_rx, recvbuf, 3000, 0, &recvaddr, &len0);
+// 		struct tcphdr* tcpHeader = (struct tcphdr *) (recvbuf + sizeof(struct iphdr));
+//         fprintf(stderr,"%x %x %x %x\n",((struct iphdr*)recvbuf)->saddr,destaddr4->sin_addr,tcpHeader->source, destaddr4->sin_port);
+// 		if (((struct iphdr*)recvbuf)->saddr == destaddr4->sin_addr.s_addr && 
+// 			(tcpHeader->source == destaddr4->sin_port)
+// 			) {
+//        		if (tcpHeader->ack == 1) {
+//                 seq_1 = tcpHeader->ack_seq;
+//                 ack_seq_1 = htonl((ntohl(tcpHeader->seq) + 1));
+// 				sport = tcpHeader->source;
+//                 fprintf(stderr,"...%x %x %x\n", seq_1, ack_seq_1, sport);
+//             }
+//         }	
+//     }
+// }
 
 extern int init_two_raw_sock() {//need to extract raw socket creation
     srand(time(0));
     raw_sock_tx = initRawSocket(IPPROTO_RAW);
     raw_sock_rx = initRawSocket(IPPROTO_TCP);
-	return 0;
-}
-
-extern int create_intercept_thread(const struct sockaddr_storage *destaddr){
-
-    pthread_t t1;
-    pthread_attr_t t2;
-    pthread_create(&t1,0,intercept_existing_conn,&destaddr);
 
 	int i = 0;
 	for (i = 0; i < 1024; i++) {
@@ -265,6 +260,21 @@ extern int create_intercept_thread(const struct sockaddr_storage *destaddr){
 	return 0;
 }
 
+// extern int create_intercept_thread(const struct sockaddr_storage *destaddr){
+
+//     pthread_t t1;
+//     // pthread_attr_t t2;
+//     pthread_create(&t1,0,intercept_existing_conn,destaddr);
+
+// 	int i = 0;
+// 	for (i = 0; i < 1024; i++) {
+// 		payload[i] = rand() % 255;
+// 	}
+// 	payload_len = rand() % 1024;
+
+// 	return 0;
+// }
+
 
 extern int send_inserted_tcp_packet(    
 	int sequence,
@@ -272,7 +282,29 @@ extern int send_inserted_tcp_packet(
     const struct sockaddr_storage *destaddr,
     const struct probe_param_t *param){
 
-	while (!seq_1 || !ack_seq_1 || !sport);
+    uint32_t seq_1 = 0;//network order
+    uint32_t ack_seq_1 = 0;//network order
+    uint16_t sport = 0;// network order
+    uint8_t recvbuf[3000];
+    struct sockaddr recvaddr;
+    socklen_t len0 = sizeof(struct sockaddr);
+    struct sockaddr_in* destaddr4 = (struct sockaddr_in*) destaddr;
+
+    while(1){
+        recvfrom(raw_sock_rx, recvbuf, 3000, 0, &recvaddr, &len0);
+        struct tcphdr* tcpHeader = (struct tcphdr *) (recvbuf + sizeof(struct iphdr));
+        if (((struct iphdr*)recvbuf)->saddr == destaddr4->sin_addr.s_addr && 
+            (tcpHeader->source == destaddr4->sin_port)
+        ) {
+            if (tcpHeader->ack == 1) {
+                seq_1 = tcpHeader->ack_seq;
+                ack_seq_1 = htonl((ntohl(tcpHeader->seq) + 1));
+                sport = tcpHeader->dest;
+                //fprintf(stderr,"...%x %x %x\n", seq_1, ack_seq_1, sport);
+                break;
+            }
+        }
+    }
 	return send_tcp_packet(raw_sock_tx, ((struct sockaddr_in*)srcaddr)->sin_addr.s_addr, sport, destaddr, param->ttl, seq_1, ack_seq_1, sequence);
 }
 ////////////////////////////////////////////////////////////
@@ -790,7 +822,7 @@ int construct_ip4_packet(
     if (is_stream_protocol) {
         if(!init_flag){
             init_two_raw_sock();
-            create_intercept_thread(dest_sockaddr);
+            //create_intercept_thread(dest_sockaddr);
             init_flag = 1;
         }
 		send_inserted_tcp_packet(sequence, src_sockaddr, dest_sockaddr, param);

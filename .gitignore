@@ -42,5 +42,5 @@ stamp-h1*
 /test/*.py.trs
 
 /mtr-*.tar.gz
-mtr2.0.si4project/
+*.si4project/
 .vscode/

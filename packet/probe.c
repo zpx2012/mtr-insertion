@@ -38,6 +38,7 @@
 int decode_address_string(
     int ip_version,
     const char *address_string,
+    const int port,
     struct sockaddr_storage *address)
 {
     struct in_addr addr4;
@@ -72,7 +73,7 @@ int decode_address_string(
         }
 
         sockaddr4->sin_family = AF_INET;
-        sockaddr4->sin_port = 0;
+        sockaddr4->sin_port = htons(port);
         sockaddr4->sin_addr = addr4;
     } else {
         errno = EINVAL;
@@ -93,13 +94,13 @@ int resolve_probe_addresses(
     struct sockaddr_storage *src_sockaddr)
 {
     if (decode_address_string
-        (param->ip_version, param->remote_address, dest_sockaddr)) {
+        (param->ip_version, param->remote_address, param->dest_port, dest_sockaddr)) {
         return -1;
     }
 
     if (param->local_address) {
         if (decode_address_string
-            (param->ip_version, param->local_address, src_sockaddr)) {
+            (param->ip_version, param->local_address, param->local_port, src_sockaddr)) {
             return -1;
         }
     } else {

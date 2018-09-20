@@ -65,7 +65,7 @@ void select_loop(
 	
 	int n_unknown = 0;
 	int ttl_cur = ctl->fstTTL-1;
-	FILE* sl_log_file = fopen("sl_log_file.log","w");
+	//FILE* sl_log_file = fopen("sl_log_file.log","w");
 	//	int numhosts = 10;???
 
     memset(&startgrace, 0, sizeof(startgrace));
@@ -140,7 +140,7 @@ void select_loop(
 
                     if (!graceperiod) {
                         if (
-							((NumPing == 0 && reach_target(ctl,ttl_cur)) || (n_unknown > ctl->maxUnknown) || (ttl_cur >= ctl->maxTTL - 1))
+							((reach_target(ctl,ttl_cur)) || (n_unknown > ctl->maxUnknown) || (ttl_cur >= ctl->maxTTL - 1))
                             && (!ctl->Interactive || ctl->ForceMaxPing)) {
                             graceperiod = 1;
                             startgrace = thistime;
@@ -151,7 +151,7 @@ void select_loop(
                         if (!graceperiod && NumPing < ctl->MaxPing){
 							n_unknown = net_send_batch_given_ttl(ctl,ttl_cur);
 							NumPing++;
-							fprintf(sl_log_file,"%d:%s %d\n",ttl_cur, iso_time(time(NULL)),NumPing);
+							//fprintf(sl_log_file,"%d:%s %d\n",ttl_cur, iso_time(time(NULL)),NumPing);
 							if(NumPing == ctl->MaxPing){
 								NumPing = 0;
 								ttl_cur++;
@@ -283,6 +283,6 @@ void select_loop(
             anyset = 1;
         }
     }
-	fclose(sl_log_file);
+	//fclose(sl_log_file);
     return;
 }
