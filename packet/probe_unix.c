@@ -453,9 +453,6 @@ void init_net_state_privileged(
 
         exit(EXIT_FAILURE);
     }
-
-	///////////////////
-	init_two_raw_sock();
 }
 
 /*
@@ -579,9 +576,6 @@ void send_probe(
         perror("gettimeofday failure");
         exit(EXIT_FAILURE);
     }
-
-	///////////////////////////////////////
-	create_rcv_thread(&probe->remote_addr);
 	
     // there might be an off-by-one in the number of tries here. 
     // this is intentional.  It is no use exhausting the very last
