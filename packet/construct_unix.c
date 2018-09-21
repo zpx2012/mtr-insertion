@@ -286,7 +286,7 @@ int get_intercept_info(struct sockaddr_storage *destaddr){
         if(ipHeader->saddr == destaddr4->sin_addr.s_addr)        {
             if(destaddr4->sin_port && tcpHeader->source != destaddr4->sin_port){//data receiver side check
                 fprintf(stderr,"get_intercept_info:wrong port %x %x\n",tcpHeader->source,destaddr4->sin_port);
-                return -1;
+                continue;
             }
             if (tcpHeader->ack == 1) {
                 seq_1 = tcpHeader->ack_seq;
