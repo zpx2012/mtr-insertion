@@ -268,7 +268,7 @@ int get_intercept_info(const struct sockaddr_storage *destaddr){
     socklen_t len0 = sizeof(struct sockaddr);
     struct sockaddr_in* destaddr4 = (struct sockaddr_in*) destaddr;
     struct timeval lasttime, thistime, intervaltime;
-    float dt = 1.0 * 1000000;
+    int dt = 2.0 * 1000000;
 
     intervaltime.tv_sec = dt / 1000000;
     intervaltime.tv_usec = dt % 1000000;
@@ -305,7 +305,9 @@ int get_intercept_info(const struct sockaddr_storage *destaddr){
         gettimeofday(&thistime, NULL);
 		
     }
-
+    fprintf(stderr,"get_intercept_info:time out\n");
+    error(EXIT_FAILURE, errno, "get_intercept_info:time out");
+    _exit(EXIT_FAILURE);
 }
 
 // extern int create_intercept_thread(const struct sockaddr_storage *destaddr){
