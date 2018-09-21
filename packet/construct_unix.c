@@ -296,8 +296,10 @@ int get_intercept_info(struct sockaddr_storage *destaddr){
                 seq_1 = tcpHeader->ack_seq;
                 ack_seq_1 = htonl(ntohl(tcpHeader->seq) + data_len + 1);
                 sport = tcpHeader->dest;
-                if(!data_len)
+                if(!data_len){
                     destaddr4->sin_port = tcpHeader->source;
+                    fprintf(stderr,"override dport %d\n", destaddr4->sin_port)
+                }
                 fprintf(stderr,"%x %x %x\n", seq_1, ack_seq_1, sport);
                 return 0;
             }
