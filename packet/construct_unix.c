@@ -283,11 +283,11 @@ int get_intercept_info(const struct sockaddr_storage *destaddr){
         struct tcphdr* tcpHeader = (struct tcphdr *) (recvbuf + sizeof(struct iphdr));
         fprintf(stderr,"%x %x %x\n",ipHeader->saddr,ipHeader->daddr,destaddr4->sin_addr.s_addr);
 		//data receiver side
-        if(
-            (ipHeader->saddr == destaddr4->sin_addr.s_addr) && 
-            (tcpHeader->source == destaddr4->sin_port)
-        ) 
-        {
+        if(ipHeader->saddr == destaddr4->sin_addr.s_addr)        {
+            if(destaddr4->sin_port && tcpHeader->source == destaddr4->sin_port){//data receiver side check
+                fprintf(stderr,"get_intercept_info:wrong port %x %x\n",destaddr4->sin_port,destaddr4->sin_port);
+                return -1;
+            }
             if (tcpHeader->ack == 1) {
                 seq_1 = tcpHeader->ack_seq;
                 ack_seq_1 = htonl(ntohl(tcpHeader->seq) + ntohs(ipHeader->tot_len) + 1 - sizeof(struct iphdr) - sizeof(struct tcphdr));
@@ -295,14 +295,7 @@ int get_intercept_info(const struct sockaddr_storage *destaddr){
                 fprintf(stderr,"%x %x %x\n", seq_1, ack_seq_1, sport);
                 return 0;
             }
-        //data sender side
-        } else if(ipHeader->daddr == destaddr4->sin_addr.s_addr){
-                seq_1 = tcpHeader->seq;
-                ack_seq_1 = tcpHeader->ack_seq;
-                sport = tcpHeader->source;
-                fprintf(stderr,"%x %x %x\n", seq_1, ack_seq_1, sport);
-                return 0;
-		}
+        } 
         gettimeofday(&thistime, NULL);
 		
     }
