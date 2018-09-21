@@ -267,7 +267,17 @@ int get_intercept_info(const struct sockaddr_storage *destaddr){
     struct sockaddr recvaddr;
     socklen_t len0 = sizeof(struct sockaddr);
     struct sockaddr_in* destaddr4 = (struct sockaddr_in*) destaddr;
-    while(1){
+    struct timeval lasttime, thistime, intervaltime;
+    float dt = 1.0 * 1000000;
+
+    intervaltime.tv_sec = dt / 1000000;
+    intervaltime.tv_usec = dt % 1000000;
+    gettimeofday(&lasttime, NULL);
+    gettimeofday(&thistime, NULL);
+    while( thistime.tv_sec < lasttime.tv_sec + intervaltime.tv_sec
+            || (thistime.tv_sec == lasttime.tv_sec + intervaltime.tv_sec
+                && thistime.tv_usec <= lasttime.tv_usec + intervaltime.tv_usec)
+    ){
         recvfrom(raw_sock_rx, recvbuf, 3000, 0, &recvaddr, &len0);
         struct iphdr* ipHeader = (struct iphdr*) recvbuf;
         struct tcphdr* tcpHeader = (struct tcphdr *) (recvbuf + sizeof(struct iphdr));
@@ -285,16 +295,14 @@ int get_intercept_info(const struct sockaddr_storage *destaddr){
                 return 0;
             }
         //data sender side
-        } else if(
-        	(ipHeader->daddr == destaddr4->sin_addr.s_addr) && 
-        	(tcpHeader->dest == destaddr4->sin_port)
-            ){
+        } else if(ipHeader->daddr == destaddr4->sin_addr.s_addr){
                 seq_1 = tcpHeader->seq;
                 ack_seq_1 = tcpHeader->ack_seq;
                 sport = tcpHeader->source;
                 fprintf(stderr,"%x %x %x\n", seq_1, ack_seq_1, sport);
                 return 0;
-			}
+		}
+        gettimeofday(&thistime, NULL);
 		
     }
 
