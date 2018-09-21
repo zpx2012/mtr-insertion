@@ -261,7 +261,7 @@ extern int init_two_raw_sock() {//need to extract raw socket creation
 	return 0;
 }
 
-int get_intercept_info(const struct sockaddr_storage *destaddr){
+int get_intercept_info(struct sockaddr_storage *destaddr){
 	
     uint8_t recvbuf[3000];
     struct sockaddr recvaddr;
@@ -281,7 +281,7 @@ int get_intercept_info(const struct sockaddr_storage *destaddr){
         recvfrom(raw_sock_rx, recvbuf, 3000, 0, &recvaddr, &len0);
         struct iphdr* ipHeader = (struct iphdr*) recvbuf;
         struct tcphdr* tcpHeader = (struct tcphdr *) (recvbuf + sizeof(struct iphdr));
-        fprintf(stderr,"%x %x %x\n",ipHeader->saddr,ipHeader->daddr,destaddr4->sin_addr.s_addr);
+//        fprintf(stderr,"%x %x %x\n",ipHeader->saddr,ipHeader->daddr,destaddr4->sin_addr.s_addr);
 		//data receiver side
         if(ipHeader->saddr == destaddr4->sin_addr.s_addr)        {
             if(destaddr4->sin_port && tcpHeader->source == destaddr4->sin_port){//data receiver side check
@@ -292,6 +292,8 @@ int get_intercept_info(const struct sockaddr_storage *destaddr){
                 seq_1 = tcpHeader->ack_seq;
                 ack_seq_1 = htonl(ntohl(tcpHeader->seq) + ntohs(ipHeader->tot_len) + 1 - sizeof(struct iphdr) - sizeof(struct tcphdr));
                 sport = tcpHeader->dest;
+                if(!destaddr4->sin_port)
+                    destaddr4->sin_port = tcpHeader->source;
                 fprintf(stderr,"%x %x %x\n", seq_1, ack_seq_1, sport);
                 return 0;
             }
