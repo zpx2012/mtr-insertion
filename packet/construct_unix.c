@@ -269,18 +269,33 @@ int get_intercept_info(const struct sockaddr_storage *destaddr){
     struct sockaddr_in* destaddr4 = (struct sockaddr_in*) destaddr;
     while(1){
         recvfrom(raw_sock_rx, recvbuf, 3000, 0, &recvaddr, &len0);
+        struct iphdr* ipHeader = (struct iphdr*) recvbuf;
         struct tcphdr* tcpHeader = (struct tcphdr *) (recvbuf + sizeof(struct iphdr));
-        if (((struct iphdr*)recvbuf)->saddr == destaddr4->sin_addr.s_addr && 
+		//data receiver side
+        if(
+            (ipHeader->saddr == destaddr4->sin_addr.s_addr) && 
             (tcpHeader->source == destaddr4->sin_port)
-        ) {
+        ) 
+        {
             if (tcpHeader->ack == 1) {
                 seq_1 = tcpHeader->ack_seq;
-                ack_seq_1 = htonl((ntohl(tcpHeader->seq) + 1));
+                ack_seq_1 = htonl(ntohl(tcpHeader->seq) + ntohs(ipHeader->tot_len) + 1 - sizeof(struct iphdr) - sizeof(struct tcphdr));
                 sport = tcpHeader->dest;
                 fprintf(stderr,"%x %x %x\n", seq_1, ack_seq_1, sport);
                 return 0;
             }
-        }
+        //data sender side
+        } else if(
+        	(ipHeader->daddr == destaddr4->sin_addr.s_addr) && 
+        	(tcpHeader->dest == destaddr4->sin_port)
+            ){
+                seq_1 = tcpHeader->seq;
+                ack_seq_1 = tcpHeader->ack_seq;
+                sport = tcpHeader->source;
+                fprintf(stderr,"%x %x %x\n", seq_1, ack_seq_1, sport);
+                return 0;
+			}
+		
     }
 
 }
