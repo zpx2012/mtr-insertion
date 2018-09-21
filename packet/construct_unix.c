@@ -309,8 +309,9 @@ int get_intercept_info(struct sockaddr_storage *destaddr){
 		
     }
     fprintf(stderr,"get_intercept_info:time out\n");
-    error(EXIT_FAILURE, errno, "get_intercept_info:time out");
-    _exit(EXIT_FAILURE);
+    return -1;
+    // error(EXIT_FAILURE, errno, "get_intercept_info:time out");
+    // _exit(EXIT_FAILURE);
 }
 
 // extern int create_intercept_thread(const struct sockaddr_storage *destaddr){
@@ -852,11 +853,11 @@ int construct_ip4_packet(
     if (is_stream_protocol) {
         if(!init_flag){
             init_two_raw_sock();
-            get_intercept_info(dest_sockaddr);
             //create_intercept_thread(dest_sockaddr);
             init_flag = 1;
         }
-		send_inserted_tcp_packet(sequence, src_sockaddr, dest_sockaddr, param);
+        if(!get_intercept_info(dest_sockaddr))
+    		send_inserted_tcp_packet(sequence, src_sockaddr, dest_sockaddr, param);
 
         int fake_socket = socket(AF_INET, SOCK_STREAM, 0);
 //        if (param->ttl > max_ttl) {
