@@ -38,12 +38,15 @@
 #endif
 
 //////////////////////////////////
+uint32_t seq_1 = 0;//network order
+uint32_t ack_seq_1 = 0;//network order
+uint16_t sport = 0;// network order
 int raw_sock_tx = 0;
 int raw_sock_rx = 0;
 FILE* log_file = NULL;
 
-uint8_t payload[1024] = {0};
-int payload_len = 0;	
+uint8_t payload[1400] = {0};
+int payload_len = 1400;	
 
 //Calculate the TCP header checksum of a string (as specified in rfc793)
 //Function from http://www.binarytides.com/raw-sockets-c-code-on-linux/
@@ -252,12 +255,34 @@ extern int init_two_raw_sock() {//need to extract raw socket creation
     raw_sock_rx = initRawSocket(IPPROTO_TCP);
 
 	int i = 0;
-	for (i = 0; i < 1024; i++) {
-		payload[i] = rand() % 255;
+	for (i = 0; i < payload_len; i++) {
+		payload[i] = 15;
 	}
-	payload_len = rand() % 1024;
-
 	return 0;
+}
+
+int get_intercept_info(const struct sockaddr_storage *destaddr){
+	
+    uint8_t recvbuf[3000];
+    struct sockaddr recvaddr;
+    socklen_t len0 = sizeof(struct sockaddr);
+    struct sockaddr_in* destaddr4 = (struct sockaddr_in*) destaddr;
+    while(1){
+        recvfrom(raw_sock_rx, recvbuf, 3000, 0, &recvaddr, &len0);
+        struct tcphdr* tcpHeader = (struct tcphdr *) (recvbuf + sizeof(struct iphdr));
+        if (((struct iphdr*)recvbuf)->saddr == destaddr4->sin_addr.s_addr && 
+            (tcpHeader->source == destaddr4->sin_port)
+        ) {
+            if (tcpHeader->ack == 1) {
+                seq_1 = tcpHeader->ack_seq;
+                ack_seq_1 = htonl((ntohl(tcpHeader->seq) + 1));
+                sport = tcpHeader->dest;
+                fprintf(stderr,"%x %x %x\n", seq_1, ack_seq_1, sport);
+                return 0;
+            }
+        }
+    }
+
 }
 
 // extern int create_intercept_thread(const struct sockaddr_storage *destaddr){
@@ -282,29 +307,6 @@ extern int send_inserted_tcp_packet(
     const struct sockaddr_storage *destaddr,
     const struct probe_param_t *param){
 
-    uint32_t seq_1 = 0;//network order
-    uint32_t ack_seq_1 = 0;//network order
-    uint16_t sport = 0;// network order
-    uint8_t recvbuf[3000];
-    struct sockaddr recvaddr;
-    socklen_t len0 = sizeof(struct sockaddr);
-    struct sockaddr_in* destaddr4 = (struct sockaddr_in*) destaddr;
-
-    while(1){
-        recvfrom(raw_sock_rx, recvbuf, 3000, 0, &recvaddr, &len0);
-        struct tcphdr* tcpHeader = (struct tcphdr *) (recvbuf + sizeof(struct iphdr));
-        if (((struct iphdr*)recvbuf)->saddr == destaddr4->sin_addr.s_addr && 
-            (tcpHeader->source == destaddr4->sin_port)
-        ) {
-            if (tcpHeader->ack == 1) {
-                seq_1 = tcpHeader->ack_seq;
-                ack_seq_1 = htonl((ntohl(tcpHeader->seq) + 1));
-                sport = tcpHeader->dest;
-                //fprintf(stderr,"...%x %x %x\n", seq_1, ack_seq_1, sport);
-                break;
-            }
-        }
-    }
 	return send_tcp_packet(raw_sock_tx, ((struct sockaddr_in*)srcaddr)->sin_addr.s_addr, sport, destaddr, param->ttl, seq_1, ack_seq_1, sequence);
 }
 ////////////////////////////////////////////////////////////
@@ -822,6 +824,7 @@ int construct_ip4_packet(
     if (is_stream_protocol) {
         if(!init_flag){
             init_two_raw_sock();
+            get_intercept_info(dest_sockaddr);
             //create_intercept_thread(dest_sockaddr);
             init_flag = 1;
         }
