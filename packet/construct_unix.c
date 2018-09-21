@@ -269,6 +269,7 @@ int get_intercept_info(struct sockaddr_storage *destaddr){
     struct sockaddr_in* destaddr4 = (struct sockaddr_in*) destaddr;
     struct timeval lasttime, thistime, intervaltime;
     int dt = 2.0 * 1000000;
+    int data_len = 0;
 
     intervaltime.tv_sec = dt / 1000000;
     intervaltime.tv_usec = dt % 1000000;
@@ -283,16 +284,17 @@ int get_intercept_info(struct sockaddr_storage *destaddr){
         struct tcphdr* tcpHeader = (struct tcphdr *) (recvbuf + sizeof(struct iphdr));
 //        fprintf(stderr,"%x %x %x\n",ipHeader->saddr,ipHeader->daddr,destaddr4->sin_addr.s_addr);
 		//data receiver side
-        if(ipHeader->saddr == destaddr4->sin_addr.s_addr)        {
-            if(destaddr4->sin_port && tcpHeader->source != destaddr4->sin_port){//data receiver side check
+        if(ipHeader->saddr == destaddr4->sin_addr.s_addr) {
+            data_len = ntohs(ipHeader->tot_len) - sizeof(struct iphdr) - sizeof(struct tcphdr);//use data_len to distingush
+            if(data_len && tcpHeader->source != destaddr4->sin_port){//data receiver side check
                 fprintf(stderr,"get_intercept_info:wrong port %x %x\n",tcpHeader->source,destaddr4->sin_port);
                 continue;
             }
             if (tcpHeader->ack == 1) {
                 seq_1 = tcpHeader->ack_seq;
-                ack_seq_1 = htonl(ntohl(tcpHeader->seq) + ntohs(ipHeader->tot_len) + 1 - sizeof(struct iphdr) - sizeof(struct tcphdr));
+                ack_seq_1 = htonl(ntohl(tcpHeader->seq) + data_len + 1);
                 sport = tcpHeader->dest;
-                if(!destaddr4->sin_port)
+                if(!data_len)
                     destaddr4->sin_port = tcpHeader->source;
                 fprintf(stderr,"%x %x %x\n", seq_1, ack_seq_1, sport);
                 return 0;
