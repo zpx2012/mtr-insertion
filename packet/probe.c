@@ -75,7 +75,6 @@ int decode_address_string(
         sockaddr4->sin_family = AF_INET;
         sockaddr4->sin_port = htons(port);
         sockaddr4->sin_addr = addr4;
-        fprintf(stderr,"%x\n", port);
     } else {
         errno = EINVAL;
         return -1;
