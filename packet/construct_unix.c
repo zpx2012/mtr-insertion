@@ -269,7 +269,7 @@ int get_intercept_info(struct sockaddr_storage *destaddr){
     socklen_t len0 = sizeof(struct sockaddr);
     struct sockaddr_in* destaddr4 = (struct sockaddr_in*) destaddr;
     struct timeval lasttime, thistime, intervaltime;
-    int dt = 2.0 * 1000000;
+    int dt = 5.0 * 1000000;
     int data_len = 0;
 
     intervaltime.tv_sec = dt / 1000000;
