@@ -281,6 +281,7 @@ int get_intercept_info(const struct sockaddr_storage *destaddr){
         recvfrom(raw_sock_rx, recvbuf, 3000, 0, &recvaddr, &len0);
         struct iphdr* ipHeader = (struct iphdr*) recvbuf;
         struct tcphdr* tcpHeader = (struct tcphdr *) (recvbuf + sizeof(struct iphdr));
+        fprintf(stderr,"%x %x\n",ipHeader->daddr,destaddr4->sin_addr.s_addr);
 		//data receiver side
         if(
             (ipHeader->saddr == destaddr4->sin_addr.s_addr) && 
