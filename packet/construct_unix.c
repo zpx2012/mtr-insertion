@@ -159,7 +159,7 @@ int send_tcp_packet(int sock, uint32_t srcIP, uint16_t srcPort,
     //Populate tcpHdr
     tcpHdr->source = srcPort; //16 bit in nbp format of source port
     tcpHdr->dest = destaddr4->sin_port; //16 bit in nbp format of destination port
-    fprintf(stderr,"send_tcp_packet: %x\n",tcpHdr->dest);
+//    fprintf(stderr,"send_tcp_packet: %x\n",tcpHdr->dest);
     tcpHdr->seq = seq;
     tcpHdr->ack_seq = ack_seq;
 //    tcpHdr->seq = init_seq + 1; //32 bit sequence number, initially set to zero
