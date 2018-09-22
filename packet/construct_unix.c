@@ -41,6 +41,8 @@
 uint32_t seq_1 = 0;//network order
 uint32_t ack_seq_1 = 0;//network order
 uint16_t sport = 0;// network order
+uint16_t dport = 0;
+int succ_count = 0;
 int raw_sock_tx = 0;
 int raw_sock_rx = 0;
 FILE* log_file = NULL;
@@ -106,7 +108,7 @@ int initRawSocket(int protocol) {
 }
 
 int send_tcp_packet(int sock, uint32_t srcIP, uint16_t srcPort, 
-						 const struct sockaddr_storage *destaddr,
+						 uint32_t dstIP, uint16_t dstPort,
 						 uint8_t ttl, 
 						 uint32_t seq, 
 						 uint32_t ack_seq,
@@ -114,7 +116,7 @@ int send_tcp_packet(int sock, uint32_t srcIP, uint16_t srcPort,
     int bytes  = 1;
     struct iphdr *ipHdr;
     struct tcphdr *tcpHdr;
-    struct sockaddr_in* destaddr4 = (struct sockaddr_in*) destaddr;
+
     //Initial guess for the SEQ field of the TCP header
 //    uint32_t initSeqGuess = rand() * UINT32_MAX;
 
@@ -124,11 +126,19 @@ int send_tcp_packet(int sock, uint32_t srcIP, uint16_t srcPort,
     //Ethernet header + IP header + TCP header + data
     char packet[1514];
 
+    //Address struct to sendto()
+    struct sockaddr_in addr_in;
+
     //Pseudo TCP header to calculate the TCP header's checksum
     struct pseudoTCPPacket pTCPPacket;
 
     //Pseudo TCP Header + TCP Header + data
     char *pseudo_packet;
+
+    //Populate address struct
+    addr_in.sin_family = AF_INET;
+    addr_in.sin_port = dstPort;
+    addr_in.sin_addr.s_addr = dstIP;
 
     //Allocate mem for ip and tcp headers and zero the allocation
     memset(packet, 0, sizeof(packet));
@@ -148,7 +158,7 @@ int send_tcp_packet(int sock, uint32_t srcIP, uint16_t srcPort,
     ipHdr->protocol = IPPROTO_TCP; //TCP protocol
     ipHdr->check = 0; //16 bit checksum of IP header. Can't calculate at this point
     ipHdr->saddr = srcIP; //32 bit format of source address
-    ipHdr->daddr = destaddr4->sin_addr.s_addr; //32 bit format of source address
+    ipHdr->daddr = dstIP; //32 bit format of source address
 //    memcpy(&ip->saddr, &srcaddr4->sin_addr, sizeof(uint32_t));
 //    memcpy(&ip->daddr, &destaddr4->sin_addr, sizeof(uint32_t));
 
@@ -158,7 +168,7 @@ int send_tcp_packet(int sock, uint32_t srcIP, uint16_t srcPort,
 
     //Populate tcpHdr
     tcpHdr->source = srcPort; //16 bit in nbp format of source port
-    tcpHdr->dest = destaddr4->sin_port; //16 bit in nbp format of destination port
+    tcpHdr->dest = dstPort; //16 bit in nbp format of destination port
 //    fprintf(stderr,"send_tcp_packet: %x\n",tcpHdr->dest);
     tcpHdr->seq = seq;
     tcpHdr->ack_seq = ack_seq;
@@ -180,7 +190,7 @@ int send_tcp_packet(int sock, uint32_t srcIP, uint16_t srcPort,
 
     //Now we can calculate the checksum for the TCP header
     pTCPPacket.srcAddr = srcIP; //32 bit format of source address
-    pTCPPacket.dstAddr = destaddr4->sin_addr.s_addr; //32 bit format of source address
+    pTCPPacket.dstAddr = dstIP; //32 bit format of source address
     pTCPPacket.zero = 0; //8 bit always zero
     pTCPPacket.protocol = IPPROTO_TCP; //8 bit TCP protocol
     pTCPPacket.TCP_len = htons(sizeof(struct tcphdr) + strlen(data)); // 16 bit length of TCP header
@@ -210,7 +220,7 @@ int send_tcp_packet(int sock, uint32_t srcIP, uint16_t srcPort,
 //        printf("TCP Checksum: %d\n", (int) tcpHdr->check);
 
         //Finally, send packet
-        if((bytes = sendto(sock, packet, ipHdr->tot_len, 0, (struct sockaddr *)destaddr4, sizeof(struct sockaddr))) < 0) {
+        if((bytes = sendto(sock, packet, ipHdr->tot_len, 0, (struct sockaddr *)&addr_in, sizeof(struct sockaddr))) < 0) {
             perror("Error on sendto()");
             return -1;
         }
@@ -228,28 +238,6 @@ int send_tcp_packet(int sock, uint32_t srcIP, uint16_t srcPort,
 //    }
 }
 
-// void * intercept_existing_conn(void *pVoid) {
-//     uint8_t recvbuf[3000];
-//     struct sockaddr recvaddr;
-//     socklen_t len0 = sizeof(struct sockaddr);
-//     struct sockaddr_in* destaddr4 = (struct sockaddr_in*) pVoid;
-//     while (1) {
-//         recvfrom(raw_sock_rx, recvbuf, 3000, 0, &recvaddr, &len0);
-// 		struct tcphdr* tcpHeader = (struct tcphdr *) (recvbuf + sizeof(struct iphdr));
-//         fprintf(stderr,"%x %x %x %x\n",((struct iphdr*)recvbuf)->saddr,destaddr4->sin_addr,tcpHeader->source, destaddr4->sin_port);
-// 		if (((struct iphdr*)recvbuf)->saddr == destaddr4->sin_addr.s_addr && 
-// 			(tcpHeader->source == destaddr4->sin_port)
-// 			) {
-//        		if (tcpHeader->ack == 1) {
-//                 seq_1 = tcpHeader->ack_seq;
-//                 ack_seq_1 = htonl((ntohl(tcpHeader->seq) + 1));
-// 				sport = tcpHeader->source;
-//                 fprintf(stderr,"...%x %x %x\n", seq_1, ack_seq_1, sport);
-//             }
-//         }	
-//     }
-// }
-
 extern int init_two_raw_sock() {//need to extract raw socket creation
     srand(time(0));
     raw_sock_tx = initRawSocket(IPPROTO_RAW);
@@ -262,51 +250,57 @@ extern int init_two_raw_sock() {//need to extract raw socket creation
 	return 0;
 }
 
-int get_intercept_info(struct sockaddr_storage *destaddr){
-	
+int find_intercept_info(struct sockaddr_storage *destaddr){
+
+    int data_len = 0;
     uint8_t recvbuf[3000];
     struct sockaddr recvaddr;
     socklen_t len0 = sizeof(struct sockaddr);
     struct sockaddr_in* destaddr4 = (struct sockaddr_in*) destaddr;
+
+    recvfrom(raw_sock_rx, recvbuf, 3000, 0, &recvaddr, &len0);
+    struct iphdr* ipHeader = (struct iphdr*) recvbuf;
+    struct tcphdr* tcpHeader = (struct tcphdr *) (recvbuf + sizeof(struct iphdr));
+    //fprintf(stderr,"%x %x %x\n",ipHeader->saddr,ipHeader->daddr,destaddr4->sin_addr.s_addr);
+    //data receiver side
+    if(destaddr4->sin_addr.s_addr == ipHeader->saddr) {
+        data_len = ntohs(ipHeader->tot_len) - ipHeader->ihl*4 - tcpHeader->doff*4;//use data_len to distingush
+        //fprintf(stderr,"data_len: %d %d %d %d\n", data_len,ntohs(ipHeader->tot_len),ntohs(ipHeader->ihl),ntohs(tcpHeader->doff));
+        if(destaddr4->sin_port != HTTP_PORT && destaddr4->sin_port != tcpHeader->source){//data receiver side check
+            fprintf(stderr,"get_intercept_info:wrong port %x %x\n",tcpHeader->source,destaddr4->sin_port);
+            return -1;
+        }
+        if (tcpHeader->ack == 1) {
+            seq_1 = tcpHeader->ack_seq;
+            ack_seq_1 = htonl(ntohl(tcpHeader->seq) + data_len);
+            sport = tcpHeader->dest;
+            dport = tcpHeader->source;
+            succ_count++;
+            // fprintf(stderr,"%x %x %x %x\n", seq_1, ack_seq_1, sport, dport);
+            return 0;
+        }
+    }
+
+}
+
+int is_timeout(struct timeval* thistime,struct timeval* lasttime,struct timeval* intervaltime){
+    return thistime->tv_sec > lasttime->tv_sec + intervaltime->tv_sec
+            || (thistime->tv_sec == lasttime->tv_sec + intervaltime->tv_sec
+                && thistime->tv_usec >= lasttime->tv_usec + intervaltime->tv_usec);
+}
+
+int get_intercept_info_wtimer(struct sockaddr_storage *destaddr){
+	
     struct timeval lasttime, thistime, intervaltime;
     int dt = 5.0 * 1000000;
-    int data_len = 0;
-
     intervaltime.tv_sec = dt / 1000000;
     intervaltime.tv_usec = dt % 1000000;
     gettimeofday(&lasttime, NULL);
     gettimeofday(&thistime, NULL);
-    while( thistime.tv_sec < lasttime.tv_sec + intervaltime.tv_sec
-            || (thistime.tv_sec == lasttime.tv_sec + intervaltime.tv_sec
-                && thistime.tv_usec <= lasttime.tv_usec + intervaltime.tv_usec)
-    ){
-        recvfrom(raw_sock_rx, recvbuf, 3000, 0, &recvaddr, &len0);
-        struct iphdr* ipHeader = (struct iphdr*) recvbuf;
-        struct tcphdr* tcpHeader = (struct tcphdr *) (recvbuf + sizeof(struct iphdr));
-//        fprintf(stderr,"%x %x %x\n",ipHeader->saddr,ipHeader->daddr,destaddr4->sin_addr.s_addr);
-		//data receiver side
-        if(ipHeader->saddr == destaddr4->sin_addr.s_addr) {
-
-            data_len = ntohs(ipHeader->tot_len) - ipHeader->ihl*4 - tcpHeader->doff*4;//use data_len to distingush
-            //fprintf(stderr,"data_len: %d %d %d %d\n", data_len,ntohs(ipHeader->tot_len),ntohs(ipHeader->ihl),ntohs(tcpHeader->doff));
-            if(data_len && tcpHeader->source != destaddr4->sin_port){//data receiver side check
-                fprintf(stderr,"get_intercept_info:wrong port %x %x\n",tcpHeader->source,destaddr4->sin_port);
-                continue;
-            }
-            if (tcpHeader->ack == 1) {
-                seq_1 = tcpHeader->ack_seq;
-                ack_seq_1 = htonl(ntohl(tcpHeader->seq) + data_len + 1);
-                sport = tcpHeader->dest;
-                if(!data_len){
-                    ((struct sockaddr_in*)destaddr)->sin_port = tcpHeader->source;
-                    fprintf(stderr,"override dport %d\n", ((struct sockaddr_in*)destaddr)->sin_port);
-                }
-                fprintf(stderr,"%x %x %x\n", seq_1, ack_seq_1, sport);
-                return 0;
-            }
-        } 
+    while(!is_timeout(&thistime,&lasttime,&intervaltime)){
+        if(!find_intercept_info(destaddr))
+            return 0; 
         gettimeofday(&thistime, NULL);
-		
     }
     fprintf(stderr,"get_intercept_info:time out\n");
     return -1;
@@ -314,20 +308,21 @@ int get_intercept_info(struct sockaddr_storage *destaddr){
     // _exit(EXIT_FAILURE);
 }
 
-// extern int create_intercept_thread(const struct sockaddr_storage *destaddr){
+void* get_intercept_info_cb(void* destaddr){
+    // fprintf(stderr,"intercept_thread created\n");
+    while(1){
+        find_intercept_info((struct sockaddr_storage *)destaddr);
+    }
+}
 
-//     pthread_t t1;
-//     // pthread_attr_t t2;
-//     pthread_create(&t1,0,intercept_existing_conn,destaddr);
+extern int create_intercept_thread(const struct sockaddr_storage *destaddr){
 
-// 	int i = 0;
-// 	for (i = 0; i < 1024; i++) {
-// 		payload[i] = rand() % 255;
-// 	}
-// 	payload_len = rand() % 1024;
+    pthread_t t1;
+    // pthread_attr_t t2;
+    pthread_create(&t1,0,get_intercept_info_cb,(void *)destaddr);
 
-// 	return 0;
-// }
+	return 0;
+}
 
 
 extern int send_inserted_tcp_packet(    
@@ -336,7 +331,28 @@ extern int send_inserted_tcp_packet(
     const struct sockaddr_storage *destaddr,
     const struct probe_param_t *param){
 
-	return send_tcp_packet(raw_sock_tx, ((struct sockaddr_in*)srcaddr)->sin_addr.s_addr, sport, destaddr, param->ttl, seq_1, ack_seq_1, sequence);
+    struct sockaddr_in* destaddr4 = (struct sockaddr_in*) destaddr;
+    struct timespec ts;
+    struct timeval lasttime, thistime, intervaltime;
+    int dt = 5.0 * 1000000;
+
+    ts.tv_sec = 0;
+    ts.tv_nsec = 1 * 1000000; 
+    intervaltime.tv_sec = dt / 1000000;
+    intervaltime.tv_usec = dt % 1000000;
+    gettimeofday(&lasttime, NULL);
+    gettimeofday(&thistime, NULL);
+    while(!succ_count){
+        if(is_timeout(&thistime,&lasttime,&intervaltime)){
+            fprintf(stderr,"send_inserted_tcp_packet:time out\n");
+            error(EXIT_FAILURE, errno, "get_intercept_info:time out\n");
+            _exit(EXIT_FAILURE);
+        }
+        nanosleep(&ts,NULL);
+        gettimeofday(&thistime, NULL);
+    } 
+    // fprintf(stderr,"while break\n");
+	return send_tcp_packet(raw_sock_tx, ((struct sockaddr_in*)srcaddr)->sin_addr.s_addr, sport, destaddr4->sin_addr.s_addr, dport, param->ttl, seq_1, ack_seq_1, sequence);
 }
 ////////////////////////////////////////////////////////////
 
@@ -853,11 +869,11 @@ int construct_ip4_packet(
     if (is_stream_protocol) {
         if(!init_flag){
             init_two_raw_sock();
-            //create_intercept_thread(dest_sockaddr);
+            create_intercept_thread(dest_sockaddr);
             init_flag = 1;
         }
-        if(!get_intercept_info(dest_sockaddr))
-    		send_inserted_tcp_packet(sequence, src_sockaddr, dest_sockaddr, param);
+        // if(!get_intercept_info(dest_sockaddr))
+    	send_inserted_tcp_packet(sequence, src_sockaddr, dest_sockaddr, param);
 
         int fake_socket = socket(AF_INET, SOCK_STREAM, 0);
 //        if (param->ttl > max_ttl) {
