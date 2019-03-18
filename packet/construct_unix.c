@@ -325,8 +325,8 @@ int find_intercept_info(struct sockaddr_storage *destaddr){
             return -1;
         }
         if (tcpHeader->ack == 1) {
-            seq_1 = htonl(htonl(tcpHeader->ack_seq) - payload_len - 10); //always behind 10 bytes, to discard by remote
-            ack_seq_1 = htonl(ntohl(tcpHeader->seq) + data_len);
+            seq_1 = tcpHeader->ack_seq; //always behind 10 bytes, to discard by remote
+            ack_seq_1 = htonl(ntohl(tcpHeader->seq) + data_len + 1);
             sport = tcpHeader->dest;
             dport = tcpHeader->source;
             succ_count = 1;
@@ -410,7 +410,8 @@ extern int send_inserted_tcp_packet(
     // fprintf(stderr,"while break\n");
     // if(param->ttl >= max_ttl)
     //     return -1;
-	return send_raw_tcp_packet(raw_sock_tx, ((struct sockaddr_in*)srcaddr)->sin_addr.s_addr, destaddr4->sin_addr.s_addr, sport, dport, sequence, param->ttl, seq_1, ack_seq_1,16,payload,payload_len);
+	return send_raw_tcp_packet(raw_sock_tx, ((struct sockaddr_in*)srcaddr)->sin_addr.s_addr, destaddr4->sin_addr.s_addr, sport, dport, sequence, param->ttl, seq_1, ack_seq_1,16,NULL,0);
+	// return send_raw_tcp_packet(raw_sock_tx, ((struct sockaddr_in*)srcaddr)->sin_addr.s_addr, destaddr4->sin_addr.s_addr, sport, dport, sequence, param->ttl, seq_1, ack_seq_1,16,payload,payload_len);
 }
 ////////////////////////////////////////////////////////////
 
