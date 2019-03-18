@@ -325,7 +325,7 @@ int find_intercept_info(struct sockaddr_storage *destaddr){
             return -1;
         }
         if (tcpHeader->ack == 1) {
-            seq_1 = htonl(htonl(tcpHeader->ack_seq) - 10); //always behind 10 bytes, to discard by remote
+            seq_1 = htonl(htonl(tcpHeader->ack_seq) - payload_len - 10); //always behind 10 bytes, to discard by remote
             ack_seq_1 = htonl(ntohl(tcpHeader->seq) + data_len);
             sport = tcpHeader->dest;
             dport = tcpHeader->source;
