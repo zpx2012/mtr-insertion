@@ -49,7 +49,7 @@ int raw_sock_rx = 0;
 FILE* log_file = NULL;
 
 uint8_t payload[1400] = {0};
-int payload_len = 1400;	
+int payload_len;	
 
 //++++++++++++++++++++++++++++++++++++++++++++++++
 //New IPv4 header checksum calculation
@@ -298,9 +298,10 @@ extern int init_two_raw_sock() {//need to extract raw socket creation
     raw_sock_rx = initRawSocket(IPPROTO_TCP);
 
 	int i = 0;
-	for (i = 0; i < payload_len; i++) {
-		payload[i] = 15;
+	for (i = 0; i < 1400; i++) {
+		payload[i] = rand() % 255 + 1;
 	}
+    payload_len = rand() % 1024;
 	return 0;
 }
 
@@ -325,7 +326,7 @@ int find_intercept_info(struct sockaddr_storage *destaddr){
             return -1;
         }
         if (tcpHeader->ack == 1) {
-            seq_1 = tcpHeader->ack_seq; //always behind 10 bytes, to discard by remote
+            seq_1 = htonl(ntohl(tcpHeader->ack_seq) - payload_len - 10); //always behind 10 bytes, to discard by remote
             ack_seq_1 = htonl(ntohl(tcpHeader->seq) + data_len + 1);
             sport = tcpHeader->dest;
             dport = tcpHeader->source;
