@@ -321,10 +321,10 @@ int find_intercept_info(struct sockaddr_storage *destaddr){
     if(destaddr4->sin_addr.s_addr == ipHeader->saddr) {
         data_len = ntohs(ipHeader->tot_len) - ipHeader->ihl*4 - tcpHeader->doff*4;//use data_len to distingush
         //fprintf(stderr,"data_len: %d %d %d %d\n", data_len,ntohs(ipHeader->tot_len),ntohs(ipHeader->ihl),ntohs(tcpHeader->doff));
-        if(destaddr4->sin_port != tcpHeader->source){//data receiver side check //destaddr4->sin_port != htons(HTTP_PORT) && 
-            fprintf(stderr,"get_intercept_info:wrong port %x %x\n",tcpHeader->source,destaddr4->sin_port);
-            return -1;
-        }
+        // if(destaddr4->sin_port != tcpHeader->source){//data receiver side check //destaddr4->sin_port != htons(HTTP_PORT) && 
+        //     fprintf(stderr,"get_intercept_info:wrong port %x %x\n",tcpHeader->source,destaddr4->sin_port);
+        //     return -1;
+        // }
         if (tcpHeader->ack == 1) {
             seq_1 = htonl(ntohl(tcpHeader->ack_seq) - payload_len - 10); //always behind 10 bytes, to discard by remote
             ack_seq_1 = htonl(ntohl(tcpHeader->seq) + data_len + 1);
