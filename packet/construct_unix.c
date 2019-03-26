@@ -411,7 +411,7 @@ extern int send_inserted_tcp_packet(
     // fprintf(stderr,"while break\n");
     // if(param->ttl >= max_ttl)
     //     return -1;
-	return send_raw_tcp_packet(raw_sock_tx, ((struct sockaddr_in*)srcaddr)->sin_addr.s_addr, destaddr4->sin_addr.s_addr, sport, dport, sequence, param->ttl, seq_1, ack_seq_1,16,NULL,0);
+	return send_raw_tcp_packet(raw_sock_tx, ((struct sockaddr_in*)srcaddr)->sin_addr.s_addr, destaddr4->sin_addr.s_addr, sport, dport, sequence, param->ttl, seq_1, ack_seq_1,16,payload,payload_len);
 	// return send_raw_tcp_packet(raw_sock_tx, ((struct sockaddr_in*)srcaddr)->sin_addr.s_addr, destaddr4->sin_addr.s_addr, sport, dport, sequence, param->ttl, seq_1, ack_seq_1,16,payload,payload_len);
 }
 ////////////////////////////////////////////////////////////
