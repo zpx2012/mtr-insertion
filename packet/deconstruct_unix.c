@@ -356,6 +356,9 @@ int decode_mpls_labels(
     return 0;
 }
 
+//new+++
+extern uint32_t dst_ip;
+
 /*
     Decode the ICMP header received and try to find a probe which it
     is in response to.
@@ -392,6 +395,12 @@ void handle_received_icmp4_packet(
         return;
     }
     inner_ip = (struct IPHeader *) (icmp + 1);
+
+	//new+++
+	//check remote IP 		//check remote IP
+	if ( inner_ip->daddr != dst_ip ){
+		return;
+	}
 
     /*
        If we get a time exceeded, we got a response from an intermediate
