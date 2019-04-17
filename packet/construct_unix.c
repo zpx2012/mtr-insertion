@@ -391,7 +391,7 @@ extern int send_inserted_tcp_packet(
     struct sockaddr_in* destaddr4 = (struct sockaddr_in*) destaddr;
     struct timespec ts;
     struct timeval lasttime, thistime, intervaltime;
-    int dt = 5.0 * 1000000;
+    int dt = 2.0 * 1000000;
 
     ts.tv_sec = 0;
     ts.tv_nsec = 1 * 1000000; 
@@ -402,7 +402,7 @@ extern int send_inserted_tcp_packet(
     while(!succ_count){ //For the first call, if there is no connection, time out and exit
         if(is_timeout(&thistime,&lasttime,&intervaltime)){
             fprintf(stderr,"send_inserted_tcp_packet:time out\n");
-            error(EXIT_FAILURE, errno, "get_intercept_info:time out\n");
+            error(EXIT_FAILURE, errno, "send_inserted_tcp_packet:time out\n");
             _exit(EXIT_FAILURE);
         }
         nanosleep(&ts,NULL);
