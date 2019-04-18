@@ -204,4 +204,7 @@ int find_source_addr(
     struct sockaddr_storage *srcaddr,
     const struct sockaddr_storage *destaddr);
 
+//new+++
+uint32_t src_ip,dst_ip;
+
 #endif
