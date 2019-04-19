@@ -218,10 +218,10 @@ bool decode_probe_argument(
            Don't allow using a local port which requires
            privileged binding.
          */
-        if (param->local_port < 1024) {
-            param->local_port = 0;
-            return false;
-        }
+//        if (param->local_port < 1024) {
+//           param->local_port = 0;
+//            return false;
+//        }
     }
 
     /*  The "type of service" field for the IP header  */

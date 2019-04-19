@@ -26,6 +26,10 @@
 
 #define MAX_MPLS_LABELS 8
 
+//new+++
+extern uint32_t dst_ip;
+extern uint16_t src_port;
+
 /*
     Given an ICMP id + ICMP sequence, find the match probe we've
     transmitted and if found, respond to the command which sent it
@@ -165,6 +169,11 @@ void handle_inner_ip4_packet(
         }
 
         tcp = (struct TCPHeader *) (ip + 1);
+	    //new+++
+    	//check remote IP 		//check remote IP
+	    if ( ip->daddr != dst_ip && tcp->srcport != src_port){
+		    return;
+	    }
 
         find_and_receive_probe(net_state, remote_addr, timestamp,
                                icmp_result, IPPROTO_TCP, 0, ip->id,
@@ -356,9 +365,6 @@ int decode_mpls_labels(
     return 0;
 }
 
-//new+++
-extern uint32_t dst_ip;
-
 /*
     Decode the ICMP header received and try to find a probe which it
     is in response to.
@@ -395,12 +401,6 @@ void handle_received_icmp4_packet(
         return;
     }
     inner_ip = (struct IPHeader *) (icmp + 1);
-
-	//new+++
-	//check remote IP 		//check remote IP
-	if ( inner_ip->daddr != dst_ip ){
-		return;
-	}
 
     /*
        If we get a time exceeded, we got a response from an intermediate
