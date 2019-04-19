@@ -583,8 +583,8 @@ void send_probe(
 
 	//new+++
 	dst_ip = ((struct sockaddr_in*)&probe->remote_addr)->sin_addr.s_addr;
-    src_port = param->local_port;
-    
+    src_port = htons(param->local_port);
+
     // there might be an off-by-one in the number of tries here. 
     // this is intentional.  It is no use exhausting the very last
     // open port. Max 10 retries would've been acceptable too I think. 

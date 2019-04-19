@@ -206,5 +206,6 @@ int find_source_addr(
 
 //new+++
 uint32_t src_ip,dst_ip;
+uint16_t src_port,dst_port;
 
 #endif

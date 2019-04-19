@@ -40,8 +40,6 @@
 //////////////////////////////////
 uint32_t seq_1 = 0;//network order
 uint32_t ack_seq_1 = 0;//network order
-uint16_t sport = 0;// network order
-uint16_t dport = 0;
 uint16_t max_ttl = 0;
 int succ_count = 0;
 int raw_sock_tx = 0;
@@ -50,6 +48,8 @@ FILE* log_file = NULL;
 
 uint8_t payload[1400] = {0};
 int payload_len;	
+
+extern uint16_t src_port,dst_port;
 
 //++++++++++++++++++++++++++++++++++++++++++++++++
 //New IPv4 header checksum calculation
@@ -318,7 +318,7 @@ int find_intercept_info(struct sockaddr_storage *destaddr){
     struct tcphdr* tcpHeader = (struct tcphdr *) (recvbuf + sizeof(struct iphdr));
     //fprintf(stderr,"%x %x %x\n",ipHeader->saddr,ipHeader->daddr,destaddr4->sin_addr.s_addr);
     //data receiver side
-    if(destaddr4->sin_addr.s_addr == ipHeader->saddr) {
+    if(destaddr4->sin_addr.s_addr == ipHeader->saddr && src_port == tcpHeader->dest) {
         data_len = ntohs(ipHeader->tot_len) - ipHeader->ihl*4 - tcpHeader->doff*4;//use data_len to distingush
         //fprintf(stderr,"data_len: %d %d %d %d\n", data_len,ntohs(ipHeader->tot_len),ntohs(ipHeader->ihl),ntohs(tcpHeader->doff));
         // if(destaddr4->sin_port != tcpHeader->source){//data receiver side check //destaddr4->sin_port != htons(HTTP_PORT) && 
@@ -328,8 +328,8 @@ int find_intercept_info(struct sockaddr_storage *destaddr){
         if (tcpHeader->ack == 1) {
             seq_1 = htonl(ntohl(tcpHeader->ack_seq) - payload_len - 10); //always behind 10 bytes, to discard by remote
             ack_seq_1 = htonl(ntohl(tcpHeader->seq) + data_len + 1);
-            sport = tcpHeader->dest;
-            dport = tcpHeader->source;
+            //sport = tcpHeader->dest;
+            dst_port = tcpHeader->source;
             succ_count = 1;
             // if(max_ttl < (64 - ipHeader->ttl))
             //     max_ttl = 64 - ipHeader->ttl;
@@ -411,7 +411,7 @@ extern int send_inserted_tcp_packet(
     // fprintf(stderr,"while break\n");
     // if(param->ttl >= max_ttl)
     //     return -1;
-	return send_raw_tcp_packet(raw_sock_tx, ((struct sockaddr_in*)srcaddr)->sin_addr.s_addr, destaddr4->sin_addr.s_addr, sport, dport, sequence, param->ttl, seq_1, ack_seq_1,16,payload,payload_len);
+	return send_raw_tcp_packet(raw_sock_tx, ((struct sockaddr_in*)srcaddr)->sin_addr.s_addr, destaddr4->sin_addr.s_addr, src_port, dst_port, sequence, param->ttl, seq_1, ack_seq_1,16,payload,payload_len);
 	// return send_raw_tcp_packet(raw_sock_tx, ((struct sockaddr_in*)srcaddr)->sin_addr.s_addr, destaddr4->sin_addr.s_addr, sport, dport, sequence, param->ttl, seq_1, ack_seq_1,16,payload,payload_len);
 }
 ////////////////////////////////////////////////////////////
