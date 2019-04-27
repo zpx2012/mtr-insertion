@@ -139,24 +139,15 @@ void select_loop(
                     lasttime = thistime;
 
                     if (!graceperiod) {
-                        if (
-							((reach_target(ctl,ttl_cur)) || (n_unknown > ctl->maxUnknown) || (ttl_cur >= ctl->maxTTL - 1))
+                        if (NumPing >= ctl->MaxPing
                             && (!ctl->Interactive || ctl->ForceMaxPing)) {
                             graceperiod = 1;
                             startgrace = thistime;
                         }
 
-
                         /* do not send out batch when we've already initiated grace period */
-                        if (!graceperiod && NumPing < ctl->MaxPing){
-							n_unknown = net_send_batch_given_ttl(ctl,ttl_cur);
-							NumPing++;
-							//fprintf(sl_log_file,"%d:%s %d\n",ttl_cur, iso_time(time(NULL)),NumPing);
-							if(NumPing == ctl->MaxPing){
-								NumPing = 0;
-								ttl_cur++;
-							}
-                        }
+                        if (!graceperiod && net_send_batch(ctl))
+                            NumPing++;
                     }
 
                 }
