@@ -276,7 +276,7 @@ int send_raw_tcp_packet(int sock,
 int initRawSocket(int protocol) {
     int sock, one = 1;
     //Raw socket without any protocol-header inside
-    if((sock = socket(AF_PACKET, SOCK_RAW, protocol)) < 0) {
+    if((sock = socket(AF_INET, SOCK_RAW, protocol)) < 0) {
         perror("Error while creating socket");
         exit(-1);
     }
